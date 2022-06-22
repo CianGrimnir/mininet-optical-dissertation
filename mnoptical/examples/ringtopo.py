@@ -73,7 +73,7 @@ class RingTopo(Topo):
                              port1=port, port2=lineout + port,
                              spans=[1 * m], cls=OLink)
                 # Terminal<->router ethernet links
-            self.addLink(f's{i}', f't{i}', port1=port, port2=N + port)
+                self.addLink(f's{i}', f't{i}', port1=port, port2=N + port)
             # Host-switch ethernet link
             self.addLink(f'h{i}', f's{i}', port2=N + 1)
 
@@ -201,7 +201,7 @@ if __name__ == '__main__':
     restServer = RestServer(net)
     net.start()
     restServer.start()
-    plotNet(net, outfile='ringtopo.png', directed=True)
+    plotNet(net, outfile='ringtopo-multi.png', directed=True)
     if 'test' in argv:
         test(net)
     else:

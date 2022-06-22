@@ -15,13 +15,9 @@ echo "* Configuring terminals in ringtopo.py network"
 #    curl "$url/connect?node=${tr}&ethPort=40&wdmPort=${j}&channel=1"
 #  done
 #done
-for i in {1,3,5,7}
-do
-  Ethport=$((20+i))
-  port=$((i+1))
-  $curl "$url/connect?node=t1&ethPort=${Ethport}&wdmPort=${port}&channel=${i}"
-  $curl "$url/connect?node=t2&ethPort=${Ethport}&wdmPort=${port}&channel=${i}"
-done
+$curl "$url/connect?node=t1&ethPort=40&wdmPort=2&channel=1"
+$curl "$url/connect?node=t2&ethPort=40&wdmPort=2&channel=1"
+
 echo "* Monitoring signals at endpoints"
 for tr in {1..2}; do
     tname="t${tr}"
@@ -37,13 +33,9 @@ done
 echo "* Configuring ROADM to forward ch1 from t1 to t2"
 # for tr in {1..20}; do
 #  link=$((tr+2))
-for i in {1,3,5,7}
-do
-  port=$((i+3))
-  $curl "$url/connect?node=r1&port1=${port}&port2=2&channels=${i}"
+  $curl "$url/connect?node=r1&port1=4&port2=2&channels=1"
   # forward signal from r2 to t2
-  $curl "$url/connect?node=r2&port1=1&port2=${port}&channels=${i}"
-done
+  $curl "$url/connect?node=r2&port1=1&port2=4&channels=1"
 # done
 
 echo "* Turning on terminals/transceivers"
