@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-uniring.py: unidirectional ring network with 1-degree ROADMs
+ringtopo.py: unidirectional ring network with 1-degree ROADMs
             and bidirectional Terminal<->ROADM links
 """
 
@@ -11,7 +11,7 @@ from mnoptical.dataplane import (OpticalLink as OLink,
                                  OpticalNet as Mininet,
                                  km, m, dB, dBm)
 
-# from mnoptical.rest import RestServer
+from mnoptical.rest import RestServer
 
 from mnoptical.ofcdemo.demolib import OpticalCLI, cleanup
 from mnoptical.examples.singleroadm import plotNet
@@ -66,7 +66,7 @@ class RingTopo(Topo):
             # Unidirectional roadm->roadm optical links
             self.addLink(f'r{i}', f'r{i % N + 1}',
                          port1=lineout, port2=linein,
-                         boost=boost, spans=spans, cls=ULink)
+                         boost=boost, spans=spans, cls=OLink) #ULink
             for port in range(1, N + 1):
                 # Bidirectional terminal <-> roadm optical links
                 self.addLink(f't{i}', f'r{i}',
@@ -171,44 +171,40 @@ def configPacketNet(net):
             else:
                 destrouter, dest = net.get(f's{j}', f'h{j}')
                 dev = router.intfs[j]
-                router.cmd(
-                    'ip route add', destrouter.IP(), 'dev', dev, '&&'
-                                                                 'ip route add', dest.IP(), 'via', destrouter.IP())
+                router.cmd('ip route add', destrouter.IP(), 'dev', dev, '&& ip route add', dest.IP(), 'via', destrouter.IP())
 
 
 def config(net):
-    "Configure optical and packet network"
+    """Configure optical and packet network"""
     configOpticalNet(net)
     configPacketNet(net)
 
 
 class CLI(OpticalCLI):
-    "CLI with config command"
-
+    """CLI with config command"""
     def do_config(self, _line):
         config(self.mn)
 
 
 def test(net):
-    "Run script in test mode"
+    """Run script in test mode"""
     config(net)
     assert net.pingAll() == 0  # 0% loss
 
 
 if __name__ == '__main__':
-
     cleanup()  # Just in case!
     setLogLevel('info')
     if 'clean' in argv: exit(0)
     topo = RingTopo(N=20)
     net = Mininet(topo=topo)
-    # restServer = RestServer(net)
+    restServer = RestServer(net)
     net.start()
-    # restServer.start()
-    # plotNet(net, outfile='ringtopo.png', directed=True)
+    restServer.start()
+    plotNet(net, outfile='ringtopo.png', directed=True)
     if 'test' in argv:
         test(net)
     else:
         CLI(net)
-    # restServer.stop()
+    restServer.stop()
     net.stop()
