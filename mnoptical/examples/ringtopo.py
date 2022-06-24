@@ -66,7 +66,7 @@ class RingTopo(Topo):
             # Unidirectional roadm->roadm optical links
             self.addLink(f'r{i}', f'r{i % N + 1}',
                          port1=lineout, port2=linein,
-                         boost=boost, spans=spans, cls=OLink) #ULink
+                         boost=boost, spans=spans, cls=OLink)  # ULink
             for port in range(1, N + 1):
                 # Bidirectional terminal <-> roadm optical links
                 self.addLink(f't{i}', f'r{i}',
@@ -99,6 +99,35 @@ def add(roadm, src, channel):
 
 
 # Configuration (for testing, etc.) using internal/native control API
+def configNet(net):
+    """
+    Configure connection between ROADMs and Terminals for ring topology
+    """
+    info("Configuring network...\n")
+    N = net.topo.N
+    channels = [1, 3, 5, 7]
+    defaultEthPort = 20
+    defaultWDMPort = 1
+    # Terminal hostport<->(uplink,downlink)
+    for ch in channels:
+        ethPort = defaultEthPort + ch
+        wdmPort = defaultWDMPort + ch
+        net['t1'].connect(ethPort=ethPort, wdmPort=wdmPort,
+                          channel=ch)
+        net['t2'].connect(ethPort=ethPort, wdmPort=wdmPort,
+                          channel=ch)
+    # Configuring ROADM to forward ch1 from t1 to t2"
+    default_lineout = 2
+    default_linein = 1
+    for ch in channels:
+        terminal_port = ch + 3
+        net['r1'].connect(terminal_port, default_lineout, channels=[ch])
+        net['r2'].connect(default_linein, terminal_port, channels=[ch])
+    # Power up transceivers
+    info('*** Turning on transceivers... \n')
+    net[f't1'].turn_on()
+    net[f't2'].turn_on()
+
 
 def configOpticalNet(net):
     """Configure ring of ROADMS and Terminals.
@@ -182,6 +211,7 @@ def config(net):
 
 class CLI(OpticalCLI):
     """CLI with config command"""
+
     def do_config(self, _line):
         config(self.mn)
 
@@ -201,7 +231,9 @@ if __name__ == '__main__':
     restServer = RestServer(net)
     net.start()
     restServer.start()
-    plotNet(net, outfile='ringtopo-multi.png', directed=True)
+    # plotNet(net, outfile='ringtopo-multi.png', directed=True)
+    # print(topo.g.node['r1']['cls'].__dict__)
+    configNet(net)
     if 'test' in argv:
         test(net)
     else:
