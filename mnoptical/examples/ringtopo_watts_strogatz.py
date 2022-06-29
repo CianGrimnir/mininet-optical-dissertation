@@ -23,6 +23,7 @@ from mininet.clean import cleanup
 
 from functools import partial
 from sys import argv
+import numpy as np
 
 
 class RingTopo(Topo):
@@ -40,11 +41,15 @@ class RingTopo(Topo):
        - N+1: local port, connected to host
     """
 
-    def build(self, power=0 * dBm, N=3, k=4):
+    def build(self, power=0 * dBm, N=3, k=4, p=0):
         """Create a 1-degree ROADM ring network, with the specified
            operational power and N ROADM/Terminal/Router/Host nodes"""
+        print(f"probability  - {p}")
         self.N = N
-        halfk = k//2
+        halfk = k // 2
+        links = {}
+        seed = np.random.RandomState(42)
+        nodes = list(range(1, N + 1))
         # Nodes/POPs: ROADM/Terminal/Router/Host
         rparams = {'monitor_mode': 'in'}
         transceivers = tuple((f'tx{ch}', power) for ch in range(1, N + 1))
@@ -63,19 +68,22 @@ class RingTopo(Topo):
         # Optical and packet links
         for i in range(1, N + 1):
             # Unidirectional roadm->roadm optical links
-            # outer_node = i + 2
-            # outer_node = outer_node if outer_node <= N else outer_node - N
-            # print(f"outer node - {i} - {outer_node}")
-            linein, lineout = 1, 2
             for j in range(1, halfk + 1):
                 neig_node = i % N + j
                 neig_node = neig_node if neig_node <= N else neig_node - N
-                print(f'r{i}', f'r{neig_node}', lineout, linein)
-                self.addLink(f'r{i}', f'r{neig_node}',
+                print(f'r{i}', f'r{neig_node}')
+                neigh_node = self.watts_strogatz_calc(i, neig_node, nodes, p, seed)
+                links[f'r{i}'] = links.get(f'r{i}', {'linein': 1, 'lineout': 2})
+                links[f'r{neigh_node}'] = links.get(f'r{neigh_node}', {'linein': 1, 'lineout': 2})
+                lineout = links[f'r{i}']['lineout']
+                linein = links[f'r{neigh_node}']['linein']
+                print(f'new r{i}', f'r{neigh_node}', lineout, linein)
+                self.addLink(f'r{i}', f'r{neigh_node}',
                              port1=lineout, port2=linein,
                              boost=boost, spans=spans, cls=OLink)  # ULink
-                linein += 2
-                lineout += 2
+                links[f'r{i}']['lineout'] += 2
+                links[f'r{neigh_node}']['linein'] += 2
+            lineout = links[f'r{i}']['lineout']
             for port in range(1, N + 1):
                 # Bidirectional terminal <-> roadm optical links
                 self.addLink(f't{i}', f'r{i}',
@@ -85,6 +93,19 @@ class RingTopo(Topo):
                 self.addLink(f's{i}', f't{i}', port1=port, port2=N + port)
             # Host-switch ethernet link
             self.addLink(f'h{i}', f's{i}', port2=N + 1)
+        print(f"links details - {links}")
+        
+    def watts_strogatz_calc(self, curr_node, neigh_node, nodes, p, seed):
+        print(f"watts -> {curr_node} {neigh_node}")
+        if seed.random() < p:
+            # to avoid loop connection
+            choices = [e for e in nodes if e not in (curr_node, neigh_node)]
+            new_neigh_node = seed.choice(choices)
+            print(f"watts new connection -> {curr_node} {new_neigh_node}")
+            return new_neigh_node
+        else:
+            print(f"no change for {curr_node}")
+            return neigh_node
 
 
 # Helper functions
@@ -201,13 +222,14 @@ if __name__ == '__main__':
     cleanup()  # Just in case!
     setLogLevel('info')
     if 'clean' in argv: exit(0)
-    topo = RingTopo(N=20)
+    topo = RingTopo(N=20, p=0.15)
     net = Mininet(topo=topo)
+    print("starting model --- ")
     restServer = RestServer(net)
     net.start()
     restServer.start()
     plotNet(net, outfile='ringtopo-watts_new.png', directed=True)
-    configNet(net)
+    # configNet(net)
     if 'test' in argv:
         test(net)
     else:
