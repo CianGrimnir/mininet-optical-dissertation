@@ -232,7 +232,6 @@ if __name__ == '__main__':
     net.start()
     restServer.start()
     # plotNet(net, outfile='ringtopo-multi.png', directed=True)
-    # print(topo.g.node['r1']['cls'].__dict__)
     configNet(net)
     if 'test' in argv:
         test(net)

@@ -24,6 +24,8 @@ from mininet.clean import cleanup
 from functools import partial
 from sys import argv
 import numpy as np
+import networkx as nx
+from utils import Queue
 
 
 class RingTopo(Topo):
@@ -48,6 +50,8 @@ class RingTopo(Topo):
         self.N = N
         halfk = k // 2
         links = {}
+        neigh_list = {}
+        neigh_graph = nx.Graph()
         seed = np.random.RandomState(42)
         nodes = list(range(1, N + 1))
         # Nodes/POPs: ROADM/Terminal/Router/Host
@@ -78,6 +82,8 @@ class RingTopo(Topo):
                 lineout = links[f'r{i}']['lineout']
                 linein = links[f'r{neigh_node}']['linein']
                 print(f'new r{i}', f'r{neigh_node}', lineout, linein)
+                neigh_list.setdefault(f'r{i}', []).append(f'r{neigh_node}')
+                neigh_graph.add_edge(f'r{i}', f'r{neigh_node}')
                 self.addLink(f'r{i}', f'r{neigh_node}',
                              port1=lineout, port2=linein,
                              boost=boost, spans=spans, cls=OLink)  # ULink
@@ -94,8 +100,14 @@ class RingTopo(Topo):
             # Host-switch ethernet link
             self.addLink(f'h{i}', f's{i}', port2=N + 1)
         print(f"links details - {links}")
-        
-    def watts_strogatz_calc(self, curr_node, neigh_node, nodes, p, seed):
+        print(f"r1 - r6 {nx.shortest_path(neigh_graph, 'r1', 'r3')}")
+        print(f"BFS - r1 - r6 {self.bfs(neigh_graph, 'r1', 'r3')}")
+        print(f"r3 - r7 {nx.shortest_path(neigh_graph, 'r1', 'r6')}")
+        print(f"BFS r3 - r7 {self.bfs(neigh_graph, 'r1', 'r6')}")
+        print(f"neighbour nodes - \n {neigh_list}")
+
+    @staticmethod
+    def watts_strogatz_calc(curr_node, neigh_node, nodes, p, seed):
         print(f"watts -> {curr_node} {neigh_node}")
         if seed.random() < p:
             # to avoid loop connection
@@ -106,6 +118,26 @@ class RingTopo(Topo):
         else:
             print(f"no change for {curr_node}")
             return neigh_node
+
+    @staticmethod
+    def bfs(graph, node, target):
+        visited = []
+        actions = []
+        queue = Queue()
+        start_node = node
+        if start_node == target:
+            return []
+        queue.push((start_node, actions))
+        while not queue.isEmpty():
+            node, action = queue.pop()
+            if node not in visited:
+                visited.append(node)
+                if node == target:
+                    return action
+                for neighbour in graph[node]:
+                    new_action = action + [neighbour]
+                    queue.push((neighbour, new_action))
+        return []
 
 
 # Helper functions
