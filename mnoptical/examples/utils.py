@@ -1,11 +1,12 @@
 class Queue:
     """A container with a first-in-first-out (FIFO) queuing policy."""
+
     def __init__(self):
         self.list = []
 
-    def push(self,item):
+    def push(self, item):
         """Enqueue the 'item' into the queue"""
-        self.list.insert(0,item)
+        self.list.insert(0, item)
 
     def pop(self):
         """
@@ -17,3 +18,17 @@ class Queue:
     def isEmpty(self):
         """Returns true if the queue is empty"""
         return len(self.list) == 0
+
+
+class NodeInformation:
+    """Store link connection information - linein/lineout that can be used to automate connection script"""
+
+    def __init__(self, nodeid, neighid, linein, lineout):
+        self.node_id = nodeid
+        self.neigh_id = neighid
+        self.lineout = lineout
+        self.linein = linein
+
+    def get_link(self):
+        """return lineout and linein information"""
+        return self.lineout, self.linein

@@ -26,7 +26,7 @@ from sys import argv
 import numpy as np
 import networkx as nx
 from utils import Queue
-
+from utils import NodeInformation
 
 class RingTopo(Topo):
     """Parametrized unidirectional ROADM ring network
@@ -51,6 +51,7 @@ class RingTopo(Topo):
         halfk = k // 2
         links = {}
         neigh_list = {}
+        neigh_metadata = {}
         neigh_graph = nx.Graph()
         seed = np.random.RandomState(42)
         nodes = list(range(1, N + 1))
@@ -82,7 +83,9 @@ class RingTopo(Topo):
                 lineout = links[f'r{i}']['lineout']
                 linein = links[f'r{neigh_node}']['linein']
                 print(f'new r{i}', f'r{neigh_node}', lineout, linein)
+                connected_node = NodeInformation(f'r{neigh_node}', f'r{i}', linein, lineout)
                 neigh_list.setdefault(f'r{i}', []).append(f'r{neigh_node}')
+                neigh_metadata.setdefault(f'r{i}', []).append({f'r{neigh_node}': connected_node})
                 neigh_graph.add_edge(f'r{i}', f'r{neigh_node}')
                 self.addLink(f'r{i}', f'r{neigh_node}',
                              port1=lineout, port2=linein,
@@ -105,6 +108,38 @@ class RingTopo(Topo):
         print(f"r3 - r7 {nx.shortest_path(neigh_graph, 'r1', 'r6')}")
         print(f"BFS r3 - r7 {self.bfs(neigh_graph, 'r1', 'r6')}")
         print(f"neighbour nodes - \n {neigh_list}")
+        print(f"neighbour metadata - \n {neigh_metadata} ")
+        get_path = self.bfs(neigh_graph, 'r1', 'r17')
+        connection_detail = self.get_connection_detail(get_path, neigh_list, neigh_metadata, 'r1')
+        print(f'returned connection - {[ i.__dict__ for i in connection_detail]}')
+
+    @staticmethod
+    def get_connection_detail(shortest_path, neigh_list, neigh_metadata, initial_node):
+        print(f"path - {shortest_path}")
+        # initial_node = 'r1'
+        connection = []
+        for path in shortest_path:
+            # print(f'initial - {path} {initial_node} {neigh_list}')
+            if path in neigh_list[initial_node]:
+                # print('properflow - ', initial_node, path)
+                neigh_node = neigh_metadata[initial_node]
+                find_node, node = path, initial_node
+            elif initial_node in neigh_list[path]:
+                # print('reverseflow - ', path, initial_node)
+                neigh_node = neigh_metadata[path]
+                find_node, node = initial_node, path
+            else:
+                print("something a miss ", initial_node, path)
+                break
+            # print("neigh_list - ", neigh_node)
+            neigh_obj = [list(k.values())[0] for k in neigh_node if list(k.keys())[0] == find_node][0]
+            lineout, linein = neigh_obj.get_link()
+            print(path, find_node, lineout, linein)
+            node_info = NodeInformation(path, find_node, linein, lineout)
+            connection.append(node_info)
+            initial_node = path
+        print(f"Connection {[ i.__dict__ for i in connection]}")
+        return connection
 
     @staticmethod
     def watts_strogatz_calc(curr_node, neigh_node, nodes, p, seed):
