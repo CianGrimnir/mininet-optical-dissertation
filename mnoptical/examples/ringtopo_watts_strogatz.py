@@ -28,6 +28,9 @@ import networkx as nx
 from utils import Queue
 from utils import NodeInformation
 
+connection_detail = []
+
+
 class RingTopo(Topo):
     """Parametrized unidirectional ROADM ring network
        ROADM r{i} port numbering:
@@ -43,7 +46,7 @@ class RingTopo(Topo):
        - N+1: local port, connected to host
     """
 
-    def build(self, power=0 * dBm, N=3, k=4, p=0):
+    def build(self, power=0 * dBm, N=3, k=4, p=0, start_node=1, end_node=2):
         """Create a 1-degree ROADM ring network, with the specified
            operational power and N ROADM/Terminal/Router/Host nodes"""
         print(f"probability  - {p}")
@@ -109,19 +112,20 @@ class RingTopo(Topo):
         print(f"BFS r3 - r7 {self.bfs(neigh_graph, 'r1', 'r6')}")
         print(f"neighbour nodes - \n {neigh_list}")
         print(f"neighbour metadata - \n {neigh_metadata} ")
-        get_path = self.bfs(neigh_graph, 'r1', 'r17')
-        connection_detail = self.get_connection_detail(get_path, neigh_list, neigh_metadata, 'r1')
-        print(f'returned connection - {[ i.__dict__ for i in connection_detail]}')
+        get_path = self.bfs(neigh_graph, f'r{start_node}', f'r{end_node}')
+        global connection_detail
+        connection_detail = self.get_connection_detail(get_path, neigh_list, neigh_metadata, f'r{start_node}')
+        print(f'returned connection - {[i.__dict__ for i in connection_detail]}')
 
     @staticmethod
     def get_connection_detail(shortest_path, neigh_list, neigh_metadata, initial_node):
-        print(f"path - {shortest_path}")
+        print(f"path from {initial_node} {shortest_path}")
         # initial_node = 'r1'
         connection = []
         for path in shortest_path:
             # print(f'initial - {path} {initial_node} {neigh_list}')
             if path in neigh_list[initial_node]:
-                # print('properflow - ', initial_node, path)
+                print('properflow - ', initial_node, path)
                 neigh_node = neigh_metadata[initial_node]
                 find_node, node = path, initial_node
             elif initial_node in neigh_list[path]:
@@ -134,11 +138,11 @@ class RingTopo(Topo):
             # print("neigh_list - ", neigh_node)
             neigh_obj = [list(k.values())[0] for k in neigh_node if list(k.keys())[0] == find_node][0]
             lineout, linein = neigh_obj.get_link()
-            print(path, find_node, lineout, linein)
-            node_info = NodeInformation(path, find_node, linein, lineout)
+            print(node, find_node, lineout, linein)
+            node_info = NodeInformation(node, find_node, linein, lineout)
             connection.append(node_info)
             initial_node = path
-        print(f"Connection {[ i.__dict__ for i in connection]}")
+        print(f"Connection {[i.__dict__ for i in connection]}")
         return connection
 
     @staticmethod
@@ -196,7 +200,7 @@ def add(roadm, src, channel):
 
 
 # Configuration (for testing, etc.) using internal/native control API
-def configNet(net):
+def configNet(net, connection, start, end):
     """
     Configure connection between ROADMs and Terminals for ring topology
     """
@@ -209,17 +213,20 @@ def configNet(net):
     for ch in channels:
         ethPort = defaultEthPort + ch
         wdmPort = defaultWDMPort + ch
-        net['t1'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
-        net['t2'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
+        net[f't{start}'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
+        net[f't{end}'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
         print(ethPort, wdmPort)
     # Configuring ROADM to forward ch1 from t1 to t2"
-    default_lineout = 2
-    default_linein = 1
-    for ch in channels:
-        terminal_port = ch + 7
-        print(f'roadm {terminal_port} {default_lineout} {default_linein}')
-        net['r1'].connect(terminal_port, default_lineout, channels=[ch])
-        net['r2'].connect(default_linein, terminal_port, channels=[ch])
+    for conn in connection:
+        for ch in channels:
+            terminal_port = ch + 7
+            node = conn.node_id
+            neigh_node = conn.neigh_id
+            default_linein = conn.linein
+            default_lineout = conn.lineout
+            print(f'roadm {terminal_port} {default_lineout} {default_linein}')
+            net[node].connect(terminal_port, default_lineout, channels=[ch])
+            net[neigh_node].connect(default_linein, terminal_port, channels=[ch])
     # Power up transceivers
     info('*** Turning on transceivers... \n')
     net[f't1'].turn_on()
@@ -289,14 +296,16 @@ if __name__ == '__main__':
     cleanup()  # Just in case!
     setLogLevel('info')
     if 'clean' in argv: exit(0)
-    topo = RingTopo(N=20, p=0.15)
+    start = 1
+    end = 2
+    topo = RingTopo(N=20, p=0, start_node=start, end_node=end)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
     net.start()
     restServer.start()
-    plotNet(net, outfile='ringtopo-watts_new.png', directed=True)
-    # configNet(net)
+    # plotNet(net, outfile='ringtopo-watts_new.png', directed=True)
+    configNet(net, connection_detail, start, end)
     if 'test' in argv:
         test(net)
     else:
