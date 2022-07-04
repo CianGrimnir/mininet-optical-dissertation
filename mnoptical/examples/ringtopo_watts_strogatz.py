@@ -225,7 +225,7 @@ def configNet(net, connection, start, end):
             if conn.reverse:
                 default_lineout, default_linein = default_linein, default_lineout
             if index != 0:
-                if conn.reverse and connection[index - 1].reverse:
+                if (conn.reverse and connection[index - 1].reverse) or (not conn.reverse and connection[index - 1].reverse):
                     terminal_port = connection[index - 1].lineout
                 else:
                     terminal_port = connection[index - 1].linein
@@ -233,7 +233,10 @@ def configNet(net, connection, start, end):
                 if conn.reverse and connection[index + 1].reverse:
                     neigh_forward_port = connection[index + 1].linein
                 elif connection[index + 1].reverse:
-                    neigh_forward_port = connection[index + 1].lineout
+                    if conn.reverse:
+                        neigh_forward_port = connection[index + 1].lineout
+                    else:
+                        neigh_forward_port = connection[index + 1].linein
                 else:
                     neigh_forward_port = connection[index+1].lineout
             info(f'neighbour - {neigh_node} start_node - {node}\n')
@@ -310,7 +313,7 @@ if __name__ == '__main__':
     setLogLevel('info')
     if 'clean' in argv: exit(0)
     start = 1
-    end = 12
+    end = 14
     topo = RingTopo(N=20, p=0.15, start_node=start, end_node=end)
     net = Mininet(topo=topo)
     print("starting model --- ")
