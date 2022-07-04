@@ -49,7 +49,6 @@ class RingTopo(Topo):
     def build(self, power=0 * dBm, N=3, k=4, p=0, start_node=1, end_node=2):
         """Create a 1-degree ROADM ring network, with the specified
            operational power and N ROADM/Terminal/Router/Host nodes"""
-        print(f"probability  - {p}")
         self.N = N
         halfk = k // 2
         links = {}
@@ -78,13 +77,13 @@ class RingTopo(Topo):
             for j in range(1, halfk + 1):
                 neig_node = i % N + j
                 neig_node = neig_node if neig_node <= N else neig_node - N
-                # print(f'r{i}', f'r{neig_node}')
+                debug(f'r{i}', f'r{neig_node}\n')
                 neigh_node = self.watts_strogatz_calc(i, neig_node, nodes, p, seed)
                 links[f'r{i}'] = links.get(f'r{i}', {'linein': 1, 'lineout': 2})
                 links[f'r{neigh_node}'] = links.get(f'r{neigh_node}', {'linein': 1, 'lineout': 2})
                 lineout = links[f'r{i}']['lineout']
                 linein = links[f'r{neigh_node}']['linein']
-                # print(f'new r{i}', f'r{neigh_node}', lineout, linein)
+                debug(f'new r{i} r{neigh_node} {lineout} {linein}\n')
                 connected_node = NodeInformation(f'r{neigh_node}', f'r{i}', linein, lineout)
                 neigh_list.setdefault(f'r{i}', []).append(f'r{neigh_node}')
                 neigh_metadata.setdefault(f'r{i}', []).append({f'r{neigh_node}': connected_node})
@@ -104,57 +103,56 @@ class RingTopo(Topo):
                 self.addLink(f's{i}', f't{i}', port1=port, port2=N + port)
             # Host-switch ethernet link
             self.addLink(f'h{i}', f's{i}', port2=N + 1)
-        # print(f"links details - {links}")
-        # print(f"neighbour nodes - \n {neigh_list}")
-        # print(f"neighbour metadata - \n {neigh_metadata} ")
+        debug(f"links details - {links}\n")
+        debug(f"neighbour nodes - \n {neigh_list}\n")
+        debug(f"neighbour metadata - \n {neigh_metadata} \n")
         get_path = self.bfs(neigh_graph, f'r{start_node}', f'r{end_node}')
         global connection_detail
         connection_detail = self.get_connection_detail(get_path, neigh_list, neigh_metadata, f'r{start_node}')
-        # print(f'returned connection - {[i.__dict__ for i in connection_detail]}')
 
     @staticmethod
     def get_connection_detail(shortest_path, neigh_list, neigh_metadata, initial_node):
-        print(f"path from {initial_node} {shortest_path}")
-        # initial_node = 'r1'
+        debug(f"path from {initial_node} {shortest_path}\n")
         connection = []
         for path in shortest_path:
-            # print(f'initial - {path} {initial_node} {neigh_list}')
+            debug(f'initial - {path} {initial_node} {neigh_list}\n')
             if path in neigh_list[initial_node]:
-                # print('properflow - ', initial_node, path)
+                debug(f'properflow - {initial_node} {path}\n')
                 neigh_node = neigh_metadata[initial_node]
                 reverse = False
                 find_node, node = path, initial_node
             elif initial_node in neigh_list[path]:
-                # print('reverseflow - ', path, initial_node)
+                debug(f'reverseflow - {path} {initial_node}\n')
                 neigh_node = neigh_metadata[path]
                 reverse = True
                 find_node, node = initial_node, path
             else:
-                # print("something a miss ", initial_node, path)
+                debug(f"something a miss {initial_node} {path}\n")
                 break
-            # print("neigh_list - ", neigh_node)
-            # print(node, find_node)
+            debug(f"neigh_list - {neigh_node}")
+            debug(f"node neighbour - {node} {find_node}\n")
             neigh_obj = [list(k.values())[0] for k in neigh_node if list(k.keys())[0] == find_node][0]
             lineout, linein = neigh_obj.get_link()
             if reverse:
                 find_node, node = node, find_node
-            # print(node, find_node, lineout, linein)
+            info(f"connection link - {node} {find_node} {lineout} {linein} \n")
             node_info = NodeInformation(node, find_node, linein, lineout, reverse)
             connection.append(node_info)
             initial_node = path
+        info(f"Connection {[i.__dict__ for i in connection]} \n")
         return connection
 
     @staticmethod
     def watts_strogatz_calc(curr_node, neigh_node, nodes, p, seed):
-        # print(f"watts -> {curr_node} {neigh_node}")
+        debug(f"watts -> {curr_node} {neigh_node}\n")
         if seed.random() < p:
             # to avoid loop connection
             choices = [e for e in nodes if e not in (curr_node, neigh_node)]
             new_neigh_node = seed.choice(choices)
-            # print(f"watts new connection -> {curr_node} {new_neigh_node}")
+            debug(f"watts new connection -> {curr_node} {new_neigh_node}\n")
             return new_neigh_node
         else:
-            # print(f"no change for {curr_node}")
+            debug(f"no change for {curr_node}")
             return neigh_node
 
     @staticmethod
@@ -214,10 +212,10 @@ def configNet(net, connection, start, end):
         wdmPort = defaultWDMPort + ch
         net[f't{start}'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
         net[f't{end}'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
-        print(ethPort, wdmPort)
+        debug(f" line terminal connection - {ethPort} {wdmPort} \n")
     # Configuring ROADM to forward ch1 from t1 to t2"
     for index, conn in enumerate(connection):
-        print(f"connection config - {conn.__dict__}")
+        info(f"connection config - {conn.__dict__}\n")
         for ch in channels:
             terminal_port = neigh_forward_port = ch + 7
             node = conn.node_id
@@ -227,17 +225,19 @@ def configNet(net, connection, start, end):
             if conn.reverse:
                 default_lineout, default_linein = default_linein, default_lineout
             if index != 0:
-                if conn.reverse:
+                if conn.reverse and connection[index - 1].reverse:
                     terminal_port = connection[index - 1].lineout
                 else:
                     terminal_port = connection[index - 1].linein
             if index != (len(connection)-1):
-                if conn.reverse:
+                if conn.reverse and connection[index + 1].reverse:
                     neigh_forward_port = connection[index + 1].linein
+                elif connection[index + 1].reverse:
+                    neigh_forward_port = connection[index + 1].lineout
                 else:
                     neigh_forward_port = connection[index+1].lineout
-            print(f'neighbour - {neigh_node} start_node - {node}')
-            print(f'roadm term - {terminal_port} neigh term - {neigh_forward_port} lineout - {default_lineout} linein - {default_linein}')
+            info(f'neighbour - {neigh_node} start_node - {node}\n')
+            info(f'roadm term - {terminal_port} neigh term - {neigh_forward_port} lineout - {default_lineout} linein - {default_linein}\n')
             net[node].connect(terminal_port, default_lineout, channels=[ch])
             net[neigh_node].connect(default_linein, neigh_forward_port, channels=[ch])
     # Power up transceivers
@@ -310,14 +310,14 @@ if __name__ == '__main__':
     setLogLevel('info')
     if 'clean' in argv: exit(0)
     start = 1
-    end = 14
-    topo = RingTopo(N=20, p=0, start_node=start, end_node=end)
+    end = 12
+    topo = RingTopo(N=20, p=0.15, start_node=start, end_node=end)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
     net.start()
     restServer.start()
-    # plotNet(net, outfile='ringtopo-watts_new.png', directed=True)
+    plotNet(net, outfile='ringtopo-watts_plot.png', directed=True)
     configNet(net, connection_detail, start, end)
     if 'test' in argv:
         test(net)
