@@ -11,10 +11,13 @@ from mnoptical.dataplane import (OpticalLink as OLink,
                                  OpticalNet as Mininet,
                                  km, m, dB, dBm)
 
+from mnoptical.ofcdemo.fakecontroller import (
+    RESTProxy)
 from mnoptical.rest import RestServer
-
+from mnoptical.node import abs_to_dbm
 from mnoptical.ofcdemo.demolib import OpticalCLI, cleanup
 from mnoptical.examples.singleroadm import plotNet
+import matplotlib.pyplot as plt
 
 from mininet.topo import Topo
 from mininet.examples.linuxrouter import LinuxRouter
@@ -99,9 +102,9 @@ class LinearTopo(Topo):
             lineout = links[f'r{i}']['lineout']
             for port in range(1, N + 1):
                 # Bidirectional terminal <-> roadm optical links
-                debug(f't{i} r{i} {port+2} {lineout+port+2}\n')
+                debug(f't{i} r{i} {port + 2} {lineout + port + 2}\n')
                 self.addLink(f't{i}', f'r{i}',
-                             port1=port+2, port2=lineout + port+2,
+                             port1=port + 2, port2=lineout + port + 2,
                              spans=[1 * m], cls=OLink)
                 # Terminal<->router ethernet links
                 self.addLink(f's{i}', f't{i}', port1=port, port2=N + port)
@@ -234,7 +237,7 @@ def configNet(net, connection, start, end):
                     terminal_port = connection[index - 1].lineout
                 else:
                     terminal_port = connection[index - 1].linein
-            if index != (len(connection)-1):
+            if index != (len(connection) - 1):
                 if conn.reverse and connection[index + 1].reverse:
                     neigh_forward_port = connection[index + 1].linein
                 elif connection[index + 1].reverse:
@@ -243,7 +246,7 @@ def configNet(net, connection, start, end):
                     else:
                         neigh_forward_port = connection[index + 1].linein
                 else:
-                    neigh_forward_port = connection[index+1].lineout
+                    neigh_forward_port = connection[index + 1].lineout
             info(f'neighbour - {neigh_node} start_node - {node}\n')
             info(f'roadm term - {terminal_port} neigh term - {neigh_forward_port} lineout - {default_lineout} linein - {default_linein}\n')
             net[node].connect(terminal_port, default_lineout, channels=[ch])
@@ -313,13 +316,34 @@ def test(net):
     assert net.pingAll() == 0  # 0% loss
 
 
+def monitorOSNR(request, start, end):
+    fmt = '%s:(%.0f,%.0f) '
+    start_response = request.get('monitor', params=dict(monitor=f't{start}-monitor', port=None, mode='in'))
+    end_response = request.get('monitor', params=dict(monitor=f't{end}-monitor', port=None, mode='in'))
+    start_osnr = start_response.json()['osnr']
+    end_osnr = end_response.json()['osnr']
+    s_frequency_list = e_frequency_list = s_power_dbm = e_power_dbm = []
+    for (channel1, data1), (channel2, data2) in zip(start_osnr.items(), end_osnr.items()):
+        start_THz = float(data1['freq']) / 1e12
+        end_THz = float(data2['freq']) / 1e12
+        s_osnr, s_gosnr = data1['osnr'], data1['gosnr']
+        e_osnr, e_gosnr = data2['osnr'], data2['gosnr']
+        print(f't{int(start)} {channel1} {s_osnr:.3f} {s_gosnr:.3f}')
+        print(f't{int(end)} {channel2} {e_osnr:.3f} {e_gosnr:.3f}')
+        print('freq - ', start_THz, end_THz)
+        s_frequency_list.append(start_THz)
+        e_frequency_list.append(end_THz)
+        s_power_dbm.append(abs_to_dbm(data1['power']))
+        e_power_dbm.append(abs_to_dbm(data2['power']))
+
+
 if __name__ == '__main__':
     cleanup()  # Just in case!
     setLogLevel('info')
     if 'clean' in argv: exit(0)
     start = 1
     end = 14
-    topo = LinearTopo(N=20, p=0.15, start_node=start, end_node=end)
+    topo = LinearTopo(N=20, p=0.32, start_node=start, end_node=end)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
@@ -327,6 +351,8 @@ if __name__ == '__main__':
     restServer.start()
     plotNet(net, outfile='linear_topo-watts_plot.png', directed=True)
     configNet(net, connection_detail, start, end)
+    requestHandler = RESTProxy()
+    monitorOSNR(requestHandler, start, end)
     if 'test' in argv:
         test(net)
     else:
