@@ -23,11 +23,12 @@ class Queue:
 class NodeInformation:
     """Store link connection information - linein/lineout that can be used to automate connection script"""
 
-    def __init__(self, nodeid, neighid, linein, lineout):
+    def __init__(self, nodeid, neighid, linein, lineout, reverse=False):
         self.node_id = nodeid
         self.neigh_id = neighid
         self.lineout = lineout
         self.linein = linein
+        self.reverse = reverse
 
     def get_link(self):
         """return lineout and linein information"""
