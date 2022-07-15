@@ -32,7 +32,7 @@ from utils import Queue
 from utils import NodeInformation
 
 connection_detail = []
-
+roadm_links = {}
 
 class LinearTopo(Topo):
     """Parametrized unidirectional ROADM ring network
@@ -60,6 +60,7 @@ class LinearTopo(Topo):
         neigh_graph = nx.Graph()
         seed = np.random.RandomState(42)
         nodes = list(range(1, N + 1))
+        global roadm_links
         # Nodes/POPs: ROADM/Terminal/Router/Host
         rparams = {'monitor_mode': 'in'}
         transceivers = tuple((f'tx{ch}', power) for ch in range(1, N + 1))
@@ -85,6 +86,8 @@ class LinearTopo(Topo):
                     continue
                 debug(f'r{i}', f'r{neig_node}\n')
                 neigh_node = self.watts_strogatz_calc(i, neig_node, nodes, p, seed)
+                roadm_links.setdefault(i, []).append(neigh_node)
+                roadm_links.setdefault(neigh_node, []).append(i)
                 links[f'r{i}'] = links.get(f'r{i}', {'linein': 1, 'lineout': 2})
                 links[f'r{neigh_node}'] = links.get(f'r{neigh_node}', {'linein': 1, 'lineout': 2})
                 lineout = links[f'r{i}']['lineout']
@@ -156,6 +159,12 @@ class LinearTopo(Topo):
             # to avoid loop connection
             choices = [e for e in nodes if e not in (curr_node, neigh_node)]
             new_neigh_node = seed.choice(choices)
+            if curr_node in roadm_links:
+                if new_neigh_node in roadm_links[curr_node]:
+                    return neigh_node
+                if new_neigh_node in roadm_links:
+                    if curr_node in roadm_links[new_neigh_node]:
+                        return neigh_node
             debug(f"watts new connection -> {curr_node} {new_neigh_node}\n")
             return new_neigh_node
         else:
@@ -322,19 +331,22 @@ def monitorOSNR(request, start, end):
     end_response = request.get('monitor', params=dict(monitor=f't{end}-monitor', port=None, mode='in'))
     start_osnr = start_response.json()['osnr']
     end_osnr = end_response.json()['osnr']
-    s_frequency_list = e_frequency_list = s_power_dbm = e_power_dbm = []
+    s_frequency_list = e_frequency_list = s_power_dbm = e_power_dbm = start_ase = end_ase = []
     for (channel1, data1), (channel2, data2) in zip(start_osnr.items(), end_osnr.items()):
         start_THz = float(data1['freq']) / 1e12
         end_THz = float(data2['freq']) / 1e12
         s_osnr, s_gosnr = data1['osnr'], data1['gosnr']
         e_osnr, e_gosnr = data2['osnr'], data2['gosnr']
-        print(f't{int(start)} {channel1} {s_osnr:.3f} {s_gosnr:.3f}')
-        print(f't{int(end)} {channel2} {e_osnr:.3f} {e_gosnr:.3f}')
+        s_ase, e_ase = data1['ase'], data2['ase']
+        print(f't{int(start)} {channel1} {s_osnr:.5f} {s_gosnr:.5f} {s_ase:.15f}')
+        print(f't{int(end)} {channel2} {e_osnr:.5f} {e_gosnr:.5f} {e_ase:.15f}')
         print('freq - ', start_THz, end_THz)
         s_frequency_list.append(start_THz)
         e_frequency_list.append(end_THz)
         s_power_dbm.append(abs_to_dbm(data1['power']))
         e_power_dbm.append(abs_to_dbm(data2['power']))
+        start_ase.append(s_ase)
+        end_ase.append(e_ase)
 
 
 if __name__ == '__main__':
@@ -349,7 +361,7 @@ if __name__ == '__main__':
     restServer = RestServer(net)
     net.start()
     restServer.start()
-    plotNet(net, outfile='linear_topo-watts_plot.png', directed=True)
+    plotNet(net, outfile='updated_linear_topo-watts_plot.png', directed=True)
     configNet(net, connection_detail, start, end)
     requestHandler = RESTProxy()
     monitorOSNR(requestHandler, start, end)
