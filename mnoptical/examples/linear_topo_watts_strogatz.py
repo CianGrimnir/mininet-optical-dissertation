@@ -16,12 +16,11 @@ from mnoptical.ofcdemo.fakecontroller import (
 from mnoptical.rest import RestServer
 from mnoptical.node import abs_to_dbm
 from mnoptical.ofcdemo.demolib import OpticalCLI, cleanup
-from mnoptical.examples.singleroadm import plotNet
 import matplotlib.pyplot as plt
-
+from mininet.node import OVSBridge, Host
 from mininet.topo import Topo
 from mininet.examples.linuxrouter import LinuxRouter
-from mininet.log import setLogLevel, info, debug
+from mininet.log import setLogLevel, info, debug, warning
 from mininet.clean import cleanup
 
 from functools import partial
@@ -33,6 +32,7 @@ from utils import NodeInformation
 
 connection_detail = []
 roadm_links = {}
+
 
 class LinearTopo(Topo):
     """Parametrized unidirectional ROADM ring network
@@ -266,50 +266,48 @@ def configNet(net, connection, start, end):
     net[f't{end}'].turn_on()
 
 
-def configOpticalNet(net):
-    """Configure ring of ROADMS and Terminals.
-       We connect a full mesh of t{1..N}<->t{1..N}"""
-    info("*** Configuring network...\n")
-    N = net.topo.N
-    # Allocate channel for each pair of nodes
-    channels, ch = {}, 1
-    for i in range(1, N + 1):
-        for j in range(i + 1, N + 1):
-            channels[i, j] = channels[j, i] = ch
-            ch += 1
-    allchannels = set(channels.values())
-    # Configure devices
-    for i in range(1, N + 1):
-        # 1-degree/unidirectional ROADMs:
-        # Add and drop local channels and pass others
-        roadm = net[f'r{i}']
-        localchannels = set()
-        for j in range(1, N + 1):
-            if i == j: continue
-            addch, dropch = channels[i, j], channels[j, i]
-            add(roadm, j, addch)
-            drop(roadm, j, dropch)
-            localchannels.update({addch, dropch})
-        fwd(roadm, allchannels - localchannels)
-        # Terminals (bidirectional)
-        # Pass Ethernet ports through to WDM ports
-        # on the appropriate channel
-        terminal = net[f't{i}']
-        for j in range(1, N + 1):
-            if i == j: continue
-            ethPort, wdmPort = j + N, j
-            debug(f'*** {terminal}-eth{ethPort} <->'
-                  f' {terminal}-wdm{wdmPort}\n')
-            terminal.connect(ethPort=ethPort, wdmPort=wdmPort,
-                             channel=channels[i, j])
-    # Turn on Terminals/transceivers
-    for i in range(1, N + 1):
-        net[f't{i}'].turn_on()
+# Debugging: Plot network graph
+def plotNet(net, outfile="singleroadm.png", directed=False, layout='circo',
+            colorMap=None):
+    "Plot network graph to outfile"
+    try:
+        import pygraphviz as pgv
+    except:
+        warning('*** Please install python3-pygraphviz for plotting\n')
+        return
+    color = {ROADM: 'red', Terminal: 'blue', OVSBridge: 'orange',
+             Host: 'black'}
+    if colorMap:
+        color.update(colorMap)
+    colors = {node: color.get(type(node), 'black')
+              for node in net.values()}
+    nfont = {'fontname': 'helvetica bold', 'penwidth': 3}
+    g = pgv.AGraph(strict=False, directed=directed, layout=layout)
+    roadms = [node for node in net.switches if isinstance(node, ROADM)]
+    terms = [node for node in net.switches if isinstance(node, Terminal)]
+    other = [node for node in net.switches if node not in set(roadms + terms)]
+    for node in roadms + terms + other:
+        g.add_node(node.name, color=colors[node], **nfont)
+    for node in net.hosts:
+        g.add_node(node.name, color=colors[node], **nfont, shape='box')
+    for link in net.links:
+        intf1, intf2 = link.intf1, link.intf2
+        node1, node2 = intf1.node, intf2.node
+        port1, port2 = node1.ports[intf1], node2.ports[intf2]
+        g.add_edge(node1.name, node2.name,
+                   headlabel=f' {node2}:{port2} ',
+                   taillabel=f' {node1}:{port1} ',
+                   labelfontsize=10, labelfontname='helvetica bold',
+                   penwidth=2)
+    print("*** Plotting network topology to", outfile)
+    g.layout()
+    g.draw(outfile)
 
 
 def config(net):
     """Configure optical and packet network"""
-    configOpticalNet(net)
+    # configNet(net)
+    pass
 
 
 class CLI(OpticalCLI):
