@@ -103,19 +103,21 @@ class LinearTopo(Topo):
                 links[f'r{i}']['lineout'] += 2
                 links[f'r{neigh_node}']['linein'] += 2
             lineout = links[f'r{i}']['lineout']
-            for port in range(1, N + 1):
+            for port in range(1, 90):
                 # Bidirectional terminal <-> roadm optical links
                 debug(f't{i} r{i} {port + 2} {lineout + port + 2}\n')
                 self.addLink(f't{i}', f'r{i}',
                              port1=port + 2, port2=lineout + port + 2,
                              spans=[1 * m], cls=OLink)
                 # Terminal<->router ethernet links
+            for port in range(1, N + 1):
                 self.addLink(f's{i}', f't{i}', port1=port, port2=N + port)
             # Host-switch ethernet link
             self.addLink(f'h{i}', f's{i}', port2=N + 1)
         debug(f"links details - {links}\n")
         debug(f"neighbour nodes - \n {neigh_list}\n")
         debug(f"neighbour metadata - \n {neigh_metadata} \n")
+        info(f"neigh graph - \n {neigh_graph}")
         get_path = self.bfs(neigh_graph, f'r{start_node}', f'r{end_node}')
         global connection_detail
         connection_detail = self.get_connection_detail(get_path, neigh_list, neigh_metadata, f'r{start_node}')
@@ -219,22 +221,25 @@ def configNet(net, connection, start, end):
     """
     info("Configuring network...\n")
     N = net.topo.N
-    channels = [1, 3, 5, 7]
+    channels = [1, 3, 5, 7, 9, 11, 15]
     defaultEthPort = 20
     defaultWDMPort = 2
+    counter = 1
     # Terminal hostport<->(uplink,downlink)
     for ch in channels:
-        ethPort = defaultEthPort + ch
-        wdmPort = defaultWDMPort + ch
+        ethPort = defaultEthPort + counter
+        wdmPort = defaultWDMPort + counter
         info(f"t{start} t{end} line terminal connection - {ethPort} {wdmPort} \n")
         net[f't{start}'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
         net[f't{end}'].connect(ethPort=ethPort, wdmPort=wdmPort, channel=ch)
-
+        counter += 1
     # Configuring ROADM to forward ch1 from t1 to t2"
     for index, conn in enumerate(connection):
         info(f"connection config - {conn.__dict__}\n")
+        counter = 1
         for ch in channels:
-            terminal_port = neigh_forward_port = ch + 8
+            terminal_port = neigh_forward_port = counter + 8
+            counter += 1
             node = conn.node_id
             neigh_node = conn.neigh_id
             default_linein = conn.linein
@@ -359,7 +364,7 @@ if __name__ == '__main__':
     restServer = RestServer(net)
     net.start()
     restServer.start()
-    plotNet(net, outfile='updated_linear_topo-watts_plot.png', directed=True)
+    plotNet(net, outfile='test_updated_linear_topo-watts_plot.png', directed=True)
     configNet(net, connection_detail, start, end)
     requestHandler = RESTProxy()
     monitorOSNR(requestHandler, start, end)
