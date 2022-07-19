@@ -215,16 +215,16 @@ def add(roadm, src, channel):
 
 
 # Configuration (for testing, etc.) using internal/native control API
-def configNet(net, connection, start, end):
+def configNet(net, connection, start, end, ctr, ch):
     """
     Configure connection between ROADMs and Terminals for ring topology
     """
     info("Configuring network...\n")
     N = net.topo.N
-    channels = [1, 3, 5, 7, 9, 11, 15]
+    channels = ch
     defaultEthPort = 20
     defaultWDMPort = 2
-    counter = 1
+    counter = ctr
     # Terminal hostport<->(uplink,downlink)
     for ch in channels:
         ethPort = defaultEthPort + counter
@@ -236,7 +236,7 @@ def configNet(net, connection, start, end):
     # Configuring ROADM to forward ch1 from t1 to t2"
     for index, conn in enumerate(connection):
         info(f"connection config - {conn.__dict__}\n")
-        counter = 1
+        counter = ctr
         for ch in channels:
             terminal_port = neigh_forward_port = counter + 8
             counter += 1
@@ -365,7 +365,10 @@ if __name__ == '__main__':
     net.start()
     restServer.start()
     plotNet(net, outfile='test_updated_linear_topo-watts_plot.png', directed=True)
-    configNet(net, connection_detail, start, end)
+    counter = 1
+    for ch in [1, 3, 5, 7, 10, 12, 13]:
+        configNet(net, connection_detail, start, end, counter, [ch])
+        counter += 1
     requestHandler = RESTProxy()
     monitorOSNR(requestHandler, start, end)
     if 'test' in argv:
