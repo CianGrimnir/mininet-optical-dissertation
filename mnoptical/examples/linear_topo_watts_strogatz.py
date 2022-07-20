@@ -4,6 +4,7 @@
 ringtopo.py: unidirectional ring network with 1-degree ROADMs
             and bidirectional Terminal<->ROADM links
 """
+import random
 
 from mnoptical.dataplane import (OpticalLink as OLink,
                                  UnidirectionalOpticalLink as ULink,
@@ -54,6 +55,7 @@ class LinearTopo(Topo):
            operational power and N ROADM/Terminal/Router/Host nodes"""
         self.N = N
         halfk = k // 2
+        ch_link = 90
         links = {}
         neigh_list = {}
         neigh_metadata = {}
@@ -63,14 +65,13 @@ class LinearTopo(Topo):
         global roadm_links
         # Nodes/POPs: ROADM/Terminal/Router/Host
         rparams = {'monitor_mode': 'in'}
-        transceivers = tuple((f'tx{ch}', power) for ch in range(1, N + 1))
+        transceivers = tuple((f'tx{ch}', power) for ch in range(1, ch_link + 1))
         tparams = {'transceivers': transceivers, 'monitor_mode': 'in'}
         for i in range(1, N + 1):
             self.addSwitch(f'r{i}', cls=ROADM, **rparams)
             self.addSwitch(f't{i}', cls=Terminal, **tparams)
             self.addNode(f's{i}', cls=LinuxRouter)
             self.addHost(f'h{i}')
-
         # Optical WAN link parameters
         boost = ('boost', {'target_gain': 17 * dB})
         aparams = {'target_gain': 25 * km * .22}
@@ -103,17 +104,17 @@ class LinearTopo(Topo):
                 links[f'r{i}']['lineout'] += 2
                 links[f'r{neigh_node}']['linein'] += 2
             lineout = links[f'r{i}']['lineout']
-            for port in range(1, 90):
+            for port in range(1, ch_link-1):
                 # Bidirectional terminal <-> roadm optical links
                 debug(f't{i} r{i} {port + 2} {lineout + port + 2}\n')
                 self.addLink(f't{i}', f'r{i}',
                              port1=port + 2, port2=lineout + port + 2,
                              spans=[1 * m], cls=OLink)
                 # Terminal<->router ethernet links
-            for port in range(1, N + 1):
-                self.addLink(f's{i}', f't{i}', port1=port, port2=N + port)
+            for port in range(1, ch_link + 1):
+                self.addLink(f's{i}', f't{i}', port1=port, port2=ch_link + port)
             # Host-switch ethernet link
-            self.addLink(f'h{i}', f's{i}', port2=N + 1)
+            self.addLink(f'h{i}', f's{i}', port2=ch_link + 1)
         debug(f"links details - {links}\n")
         debug(f"neighbour nodes - \n {neigh_list}\n")
         debug(f"neighbour metadata - \n {neigh_metadata} \n")
@@ -221,10 +222,12 @@ def configNet(net, connection, start, end, ctr, ch):
     """
     info("Configuring network...\n")
     N = net.topo.N
+    # channels = [1] #, 3, 5, 7, 9, 11, 15]
     channels = ch
-    defaultEthPort = 20
+    defaultEthPort = 90
     defaultWDMPort = 2
     counter = ctr
+    print(f"counter {counter}")
     # Terminal hostport<->(uplink,downlink)
     for ch in channels:
         ethPort = defaultEthPort + counter
@@ -237,6 +240,7 @@ def configNet(net, connection, start, end, ctr, ch):
     for index, conn in enumerate(connection):
         info(f"connection config - {conn.__dict__}\n")
         counter = ctr
+        print(f"counter inside {counter}")
         for ch in channels:
             terminal_port = neigh_forward_port = counter + 8
             counter += 1
@@ -357,20 +361,22 @@ if __name__ == '__main__':
     setLogLevel('info')
     if 'clean' in argv: exit(0)
     start = 1
-    end = 14
-    topo = LinearTopo(N=20, p=0.32, start_node=start, end_node=end)
+    end = 6
+    topo = LinearTopo(N=10, p=0.32, start_node=start, end_node=end)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
     net.start()
     restServer.start()
+    requestHandler = RESTProxy()
     plotNet(net, outfile='test_updated_linear_topo-watts_plot.png', directed=True)
     counter = 1
-    for ch in [1, 3, 5, 7, 10, 12, 13]:
+    channels = random.sample(range(1, 20), 15)
+    print(channels)
+    for ch in channels:
         configNet(net, connection_detail, start, end, counter, [ch])
+        monitorOSNR(requestHandler, start, end)
         counter += 1
-    requestHandler = RESTProxy()
-    monitorOSNR(requestHandler, start, end)
     if 'test' in argv:
         test(net)
     else:
