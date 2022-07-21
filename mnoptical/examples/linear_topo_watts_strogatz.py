@@ -51,7 +51,7 @@ class LinearTopo(Topo):
        - N+1: local port, connected to host
     """
 
-    def build(self, power=0 * dBm, N=3, k=4, p=0, start_node=1, end_node=2):
+    def build(self, power=0 * dBm, N=3, k=4, p=0, connection=[]):
         """Create a 1-degree ROADM ring network, with the specified
            operational power and N ROADM/Terminal/Router/Host nodes"""
         self.N = N
@@ -116,7 +116,7 @@ class LinearTopo(Topo):
                 links[f'r{i}']['lineout'] = lineout
                 links[f'r{neigh_node}']['linein'] = linein
             # lineout = links[f'r{i}']['lineout']
-            roadm_line = 19
+            roadm_line = 29
             for port in range(1, ch_link - 1):
                 # Bidirectional terminal <-> roadm optical links
                 debug(f't{i} r{i} {port + 2} {roadm_line + port + 2}\n')
@@ -131,10 +131,12 @@ class LinearTopo(Topo):
         info(f"links details - {links}\n")
         info(f"neighbour nodes - \n {neigh_list}\n")
         info(f"neighbour metadata - \n {neigh_metadata} \n")
-        info(f"neigh graph - \n {neigh_graph}")
-        get_path = self.bfs(neigh_graph, f'r{start_node}', f'r{end_node}')
         global connection_detail
-        connection_detail = self.get_connection_detail(get_path, neigh_list, neigh_metadata, f'r{start_node}')
+        for conn_node in connection:
+            get_path = self.bfs(neigh_graph, f'r{conn_node["start"]}', f'r{conn_node["end"]}')
+            print(f"bfs path = {get_path}")
+            connection_detail.append(self.get_connection_detail(get_path, neigh_list, neigh_metadata, f'r{conn_node["start"]}'))
+            print(f"connection detail - {connection_detail[-1]}")
 
     @staticmethod
     def get_connection_detail(shortest_path, neigh_list, neigh_metadata, initial_node):
@@ -255,7 +257,7 @@ def configNet(net, connection, start, end, ctr, ch):
         counter = ctr
         print(f"counter inside {counter}")
         for ch in channels:
-            terminal_port = neigh_forward_port = counter + 21
+            terminal_port = neigh_forward_port = counter + 31
             counter += 1
             node = conn.node_id
             neigh_node = conn.neigh_id
@@ -284,11 +286,12 @@ def configNet(net, connection, start, end, ctr, ch):
             net[neigh_node].connect(default_linein, neigh_forward_port, channels=[ch])
 
 
-def start_transceiver(net, start, end):
+def start_transceiver(net, connection):
     # Power up transceivers
     info('*** Turning on transceivers... \n')
-    net[f't{start}'].turn_on()
-    net[f't{end}'].turn_on()
+    for trans_conn in connection:
+        net[f't{trans_conn["start"]}'].turn_on()
+        net[f't{trans_conn["end"]}'].turn_on()
 
 
 # Debugging: Plot network graph
@@ -348,37 +351,39 @@ def test(net):
     assert net.pingAll() == 0  # 0% loss
 
 
-def monitorOSNR(request, start, end):
+def monitorOSNR(request, conn):
     fmt = '%s:(%.0f,%.0f) '
-    start_response = request.get('monitor', params=dict(monitor=f't{start}-monitor', port=None, mode='in'))
-    end_response = request.get('monitor', params=dict(monitor=f't{end}-monitor', port=None, mode='in'))
-    start_osnr = start_response.json()['osnr']
-    end_osnr = end_response.json()['osnr']
-    s_frequency_list = e_frequency_list = s_power_dbm = e_power_dbm = start_ase = end_ase = []
-    for (channel1, data1), (channel2, data2) in zip(start_osnr.items(), end_osnr.items()):
-        start_THz = float(data1['freq']) / 1e12
-        end_THz = float(data2['freq']) / 1e12
-        s_osnr, s_gosnr = data1['osnr'], data1['gosnr']
-        e_osnr, e_gosnr = data2['osnr'], data2['gosnr']
-        s_ase, e_ase = data1['ase'], data2['ase']
-        print(f't{int(start)} {channel1} {s_osnr:.5f} {s_gosnr:.5f} {s_ase:.15f}')
-        print(f't{int(end)} {channel2} {e_osnr:.5f} {e_gosnr:.5f} {e_ase:.15f}')
-        print('freq - ', start_THz, end_THz)
-        s_frequency_list.append(start_THz)
-        e_frequency_list.append(end_THz)
-        s_power_dbm.append(abs_to_dbm(data1['power']))
-        e_power_dbm.append(abs_to_dbm(data2['power']))
-        start_ase.append(s_ase)
-        end_ase.append(e_ase)
+    for end_connection in conn:
+        start = end_connection['start']
+        end = end_connection['start']
+        start_response = request.get('monitor', params=dict(monitor=f't{start}-monitor', port=None, mode='in'))
+        end_response = request.get('monitor', params=dict(monitor=f't{end}-monitor', port=None, mode='in'))
+        start_osnr = start_response.json()['osnr']
+        end_osnr = end_response.json()['osnr']
+        s_frequency_list = e_frequency_list = s_power_dbm = e_power_dbm = start_ase = end_ase = []
+        for (channel1, data1), (channel2, data2) in zip(start_osnr.items(), end_osnr.items()):
+            start_THz = float(data1['freq']) / 1e12
+            end_THz = float(data2['freq']) / 1e12
+            s_osnr, s_gosnr = data1['osnr'], data1['gosnr']
+            e_osnr, e_gosnr = data2['osnr'], data2['gosnr']
+            s_ase, e_ase = data1['ase'], data2['ase']
+            print(f't{int(start)} {channel1} {s_osnr:.5f} {s_gosnr:.5f} {s_ase:.15f}')
+            print(f't{int(end)} {channel2} {e_osnr:.5f} {e_gosnr:.5f} {e_ase:.15f}')
+            print('freq - ', start_THz, end_THz)
+        # s_frequency_list.append(start_THz)
+        # e_frequency_list.append(end_THz)
+        # s_power_dbm.append(abs_to_dbm(data1['power']))
+        # e_power_dbm.append(abs_to_dbm(data2['power']))
+        # start_ase.append(s_ase)
+        # end_ase.append(e_ase)
 
 
 if __name__ == '__main__':
     cleanup()  # Just in case!
     setLogLevel('info')
     if 'clean' in argv: exit(0)
-    start = 1
-    end = 6
-    topo = LinearTopo(N=10, p=0.32, start_node=start, end_node=end)
+    conn = [{'start': 1, 'end': 15}, {'start': 2, 'end': 12}]
+    topo = LinearTopo(N=20, p=0.32, connection=conn)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
@@ -391,9 +396,12 @@ if __name__ == '__main__':
     channels = random.sample(range(1, 10), 2)
     print(channels)
     for ch in channels:
-        configNet(net, connection_detail, start, end, counter, [ch])
-        start_transceiver(net, start, end)
-        monitorOSNR(requestHandler, start, end)
+        count = 0
+        for end_conn in conn:
+            configNet(net, connection_detail[count], end_conn['start'], end_conn['end'], counter, [ch])
+            count += 1
+        start_transceiver(net, conn)
+        monitorOSNR(requestHandler, conn)
         counter += 1
 
     if 'test' in argv:
