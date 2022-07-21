@@ -33,6 +33,7 @@ from utils import NodeInformation
 
 connection_detail = []
 roadm_links = {}
+terminal_ports = {}
 
 
 class LinearTopo(Topo):
@@ -116,7 +117,7 @@ class LinearTopo(Topo):
                 links[f'r{neigh_node}']['linein'] = linein
             # lineout = links[f'r{i}']['lineout']
             roadm_line = 19
-            for port in range(1, ch_link-1):
+            for port in range(1, ch_link - 1):
                 # Bidirectional terminal <-> roadm optical links
                 debug(f't{i} r{i} {port + 2} {roadm_line + port + 2}\n')
                 self.addLink(f't{i}', f'r{i}',
@@ -281,6 +282,9 @@ def configNet(net, connection, start, end, ctr, ch):
             info(f'roadm term - {terminal_port} neigh term - {neigh_forward_port} lineout - {default_lineout} linein - {default_linein}\n')
             net[node].connect(terminal_port, default_lineout, channels=[ch])
             net[neigh_node].connect(default_linein, neigh_forward_port, channels=[ch])
+
+
+def start_transceiver(net, start, end):
     # Power up transceivers
     info('*** Turning on transceivers... \n')
     net[f't{start}'].turn_on()
@@ -388,6 +392,7 @@ if __name__ == '__main__':
     print(channels)
     for ch in channels:
         configNet(net, connection_detail, start, end, counter, [ch])
+        start_transceiver(net, start, end)
         monitorOSNR(requestHandler, start, end)
         counter += 1
 
