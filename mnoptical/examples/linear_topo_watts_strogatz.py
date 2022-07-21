@@ -94,30 +94,42 @@ class LinearTopo(Topo):
                 lineout = links[f'r{i}']['lineout']
                 linein = links[f'r{neigh_node}']['linein']
                 debug(f'new r{i} r{neigh_node} {lineout} {linein}\n')
-                connected_node = NodeInformation(f'r{neigh_node}', f'r{i}', linein, lineout)
+                # connected_node = NodeInformation(f'r{neigh_node}', f'r{i}', linein, lineout)
                 neigh_list.setdefault(f'r{i}', []).append(f'r{neigh_node}')
-                neigh_metadata.setdefault(f'r{i}', []).append({f'r{neigh_node}': connected_node})
+                # neigh_metadata.setdefault(f'r{i}', []).append({f'r{neigh_node}': connected_node})
                 neigh_graph.add_edge(f'r{i}', f'r{neigh_node}')
-                self.addLink(f'r{i}', f'r{neigh_node}',
-                             port1=lineout, port2=linein,
-                             boost=boost, spans=spans, cls=OLink)  # ULink
-                links[f'r{i}']['lineout'] += 2
-                links[f'r{neigh_node}']['linein'] += 2
-            lineout = links[f'r{i}']['lineout']
+                linein_con = []
+                lineout_con = []
+                for _ in range(3):
+                    print(f'connecting roadms - r{i} r{neigh_node} {lineout} {linein}')
+                    self.addLink(f'r{i}', f'r{neigh_node}',
+                                 port1=lineout, port2=linein,
+                                 boost=boost, spans=spans, cls=OLink)  # ULink
+                    linein_con.append(linein)
+                    lineout_con.append(lineout)
+                    lineout += 2
+                    linein += 2
+                connected_node = NodeInformation(f'r{neigh_node}', f'r{i}', linein_con, lineout_con)
+                print(f"connected nodes - {connected_node.__dict__}")
+                neigh_metadata.setdefault(f'r{i}', []).append({f'r{neigh_node}': connected_node})
+                links[f'r{i}']['lineout'] = lineout
+                links[f'r{neigh_node}']['linein'] = linein
+            # lineout = links[f'r{i}']['lineout']
+            roadm_line = 19
             for port in range(1, ch_link-1):
                 # Bidirectional terminal <-> roadm optical links
-                debug(f't{i} r{i} {port + 2} {lineout + port + 2}\n')
+                debug(f't{i} r{i} {port + 2} {roadm_line + port + 2}\n')
                 self.addLink(f't{i}', f'r{i}',
-                             port1=port + 2, port2=lineout + port + 2,
+                             port1=port + 2, port2=roadm_line + port + 2,
                              spans=[1 * m], cls=OLink)
                 # Terminal<->router ethernet links
             for port in range(1, ch_link + 1):
                 self.addLink(f's{i}', f't{i}', port1=port, port2=ch_link + port)
             # Host-switch ethernet link
             self.addLink(f'h{i}', f's{i}', port2=ch_link + 1)
-        debug(f"links details - {links}\n")
-        debug(f"neighbour nodes - \n {neigh_list}\n")
-        debug(f"neighbour metadata - \n {neigh_metadata} \n")
+        info(f"links details - {links}\n")
+        info(f"neighbour nodes - \n {neigh_list}\n")
+        info(f"neighbour metadata - \n {neigh_metadata} \n")
         info(f"neigh graph - \n {neigh_graph}")
         get_path = self.bfs(neigh_graph, f'r{start_node}', f'r{end_node}')
         global connection_detail
@@ -242,7 +254,7 @@ def configNet(net, connection, start, end, ctr, ch):
         counter = ctr
         print(f"counter inside {counter}")
         for ch in channels:
-            terminal_port = neigh_forward_port = counter + 8
+            terminal_port = neigh_forward_port = counter + 21
             counter += 1
             node = conn.node_id
             neigh_node = conn.neigh_id
@@ -371,12 +383,14 @@ if __name__ == '__main__':
     requestHandler = RESTProxy()
     plotNet(net, outfile='test_updated_linear_topo-watts_plot.png', directed=True)
     counter = 1
-    channels = random.sample(range(1, 20), 15)
+
+    channels = random.sample(range(1, 10), 2)
     print(channels)
     for ch in channels:
         configNet(net, connection_detail, start, end, counter, [ch])
         monitorOSNR(requestHandler, start, end)
         counter += 1
+
     if 'test' in argv:
         test(net)
     else:
