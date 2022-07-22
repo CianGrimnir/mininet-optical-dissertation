@@ -4,8 +4,9 @@
 ringtopo.py: unidirectional ring network with 1-degree ROADMs
             and bidirectional Terminal<->ROADM links
 """
+import copy
 import random
-
+import csv
 from mnoptical.dataplane import (OpticalLink as OLink,
                                  UnidirectionalOpticalLink as ULink,
                                  ROADM, Terminal,
@@ -351,38 +352,85 @@ def test(net):
     assert net.pingAll() == 0  # 0% loss
 
 
-def monitorOSNR(request, conn):
+def get_path_distance(path):
+    print(f'get_path {path}')
+    hop_count = len(path)
+    term2roadm = m
+    roadm2roadm = 4 * 25 * km * hop_count
+    dist = term2roadm + roadm2roadm
+    print(f'total path - {dist}')
+    return dist
+
+
+def monitorOSNR(request, conn, conn_detail):
     fmt = '%s:(%.0f,%.0f) '
-    for end_connection in conn:
-        start = end_connection['start']
-        end = end_connection['start']
+    for conn_index in range(0, len(conn)):
+        start = conn[conn_index]['start']
+        end = conn[conn_index]['end']
+        writer = conn[conn_index]['file']
+        ch_enabled = conn[conn_index]['ch']
+        path = get_path_distance(conn_detail[conn_index])
         start_response = request.get('monitor', params=dict(monitor=f't{start}-monitor', port=None, mode='in'))
         end_response = request.get('monitor', params=dict(monitor=f't{end}-monitor', port=None, mode='in'))
         start_osnr = start_response.json()['osnr']
         end_osnr = end_response.json()['osnr']
-        s_frequency_list = e_frequency_list = s_power_dbm = e_power_dbm = start_ase = end_ase = []
+        # populate csv row with initial data
+        csv_row = [0] * channels_length
+        csv_row = [1 if x + 1 in ch_enabled else y for x, y in enumerate(csv_row)]
+        print(ch_enabled)
+        print(csv_row)
         for (channel1, data1), (channel2, data2) in zip(start_osnr.items(), end_osnr.items()):
             start_THz = float(data1['freq']) / 1e12
             end_THz = float(data2['freq']) / 1e12
             s_osnr, s_gosnr = data1['osnr'], data1['gosnr']
             e_osnr, e_gosnr = data2['osnr'], data2['gosnr']
             s_ase, e_ase = data1['ase'], data2['ase']
+            s_power_abs = data1['power']
+            s_power_dbm = abs_to_dbm(s_power_abs)
+            e_power_abs = data2['power']
+            e_power_dbm = abs_to_dbm(e_power_abs)
+            # prepare data for writing the dataset to file
+            row = copy.deepcopy(csv_row)
+            row.append(channel1)
+            row.append(e_power_dbm)
+            row.append(path)
+            row.append(s_ase)
+            row.append(e_ase)
+            row.append(s_osnr)
+            row.append(e_osnr)
+            row.append(s_gosnr)
+            row.append(e_gosnr)
             print(f't{int(start)} {channel1} {s_osnr:.5f} {s_gosnr:.5f} {s_ase:.15f}')
             print(f't{int(end)} {channel2} {e_osnr:.5f} {e_gosnr:.5f} {e_ase:.15f}')
             print('freq - ', start_THz, end_THz)
-        # s_frequency_list.append(start_THz)
-        # e_frequency_list.append(end_THz)
-        # s_power_dbm.append(abs_to_dbm(data1['power']))
-        # e_power_dbm.append(abs_to_dbm(data2['power']))
-        # start_ase.append(s_ase)
-        # end_ase.append(e_ase)
+            print(f'power start - {s_power_abs} {s_power_dbm} end - {e_power_abs} {e_power_dbm}')
+            print(f'writing row - {row}')
+            writer.writerow(row)
+
+
+def create_header(writer, ch_len):
+    header = list(range(1, ch_len + 1))
+    header.extend(['ch', 'pw', 'path', 's_ase', 'e_ase', 's_osnr', 'e_osnr', 's_gosnr', 'e_gosnr'])
+    writer.writerow(header)
 
 
 if __name__ == '__main__':
     cleanup()  # Just in case!
     setLogLevel('info')
     if 'clean' in argv: exit(0)
-    conn = [{'start': 1, 'end': 15}, {'start': 2, 'end': 12}]
+    # conn = [{'start': 1, 'end': 15}, {'start': 2, 'end': 12}]
+    channels_length = 80
+    channels = []
+    channels.append(random.sample(range(1, 81), channels_length))
+    channels.append(random.sample(range(1, 81), channels_length))
+    print(channels)
+    conn1_file = open("first_connection_topo1.csv", 'w')
+    conn1_writer = csv.writer(conn1_file)
+    conn2_file = open("second_connection_topo1.csv", 'w')
+    conn2_writer = csv.writer(conn2_file)
+    create_header(conn1_writer, channels_length)
+    create_header(conn2_writer, channels_length)
+    conn = [{'start': 1, 'end': 15, 'ch': [], 'file': conn1_writer}, {'start': 2, 'end': 12, 'ch': [], 'file': conn2_writer}]
     topo = LinearTopo(N=20, p=0.32, connection=conn)
     net = Mininet(topo=topo)
     print("starting model --- ")
@@ -392,18 +440,17 @@ if __name__ == '__main__':
     requestHandler = RESTProxy()
     plotNet(net, outfile='test_updated_linear_topo-watts_plot.png', directed=True)
     counter = 1
-
-    channels = random.sample(range(1, 10), 2)
-    print(channels)
-    for ch in channels:
+    for ch in range(channels_length):
         count = 0
         for end_conn in conn:
-            configNet(net, connection_detail[count], end_conn['start'], end_conn['end'], counter, [ch])
+            configNet(net, connection_detail[count], end_conn['start'], end_conn['end'], counter, [channels[count][ch]])
+            end_conn['ch'].append(channels[count][ch])
             count += 1
         start_transceiver(net, conn)
-        monitorOSNR(requestHandler, conn)
+        monitorOSNR(requestHandler, conn, connection_detail)
         counter += 1
-
+    conn1_file.close()
+    conn2_file.close()
     if 'test' in argv:
         test(net)
     else:
