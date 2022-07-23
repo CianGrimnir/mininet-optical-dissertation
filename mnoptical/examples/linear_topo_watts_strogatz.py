@@ -35,6 +35,7 @@ from utils import NodeInformation
 connection_detail = []
 roadm_links = {}
 terminal_ports = {}
+distance = 20
 
 
 class LinearTopo(Topo):
@@ -76,8 +77,8 @@ class LinearTopo(Topo):
             self.addHost(f'h{i}')
         # Optical WAN link parameters
         boost = ('boost', {'target_gain': 17 * dB})
-        aparams = {'target_gain': 25 * km * .22}
-        spans = [25 * km, ('amp1', aparams), 25 * km, ('amp2', aparams), 25 * km, ('amp3', aparams), 25 * km, ('amp4', aparams)]
+        aparams = {'target_gain': distance * km * .22}
+        spans = [distance * km, ('amp1', aparams), distance * km, ('amp2', aparams), distance * km, ('amp3', aparams), distance * km, ('amp4', aparams)]
         # Optical and packet links
         for i in range(1, N + 1):
             # Unidirectional roadm->roadm optical links
@@ -356,7 +357,7 @@ def get_path_distance(path):
     print(f'get_path {path}')
     hop_count = len(path)
     term2roadm = m
-    roadm2roadm = 4 * 25 * km * hop_count
+    roadm2roadm = 4 * distance * km * hop_count
     dist = term2roadm + roadm2roadm
     print(f'total path - {dist}')
     return dist
@@ -418,27 +419,30 @@ if __name__ == '__main__':
     cleanup()  # Just in case!
     setLogLevel('info')
     if 'clean' in argv: exit(0)
-    # conn = [{'start': 1, 'end': 15}, {'start': 2, 'end': 12}]
     channels_length = 80
     channels = []
     channels.append(random.sample(range(1, 81), channels_length))
     channels.append(random.sample(range(1, 81), channels_length))
+    channels.append(random.sample(range(1, 81), channels_length))
     print(channels)
-    conn1_file = open("first_connection_topo1.csv", 'w')
+    conn1_file = open("first__connection_topo2_p050.csv", 'w')
     conn1_writer = csv.writer(conn1_file)
-    conn2_file = open("second_connection_topo1.csv", 'w')
+    conn2_file = open("second__connection_topo2_p050.csv", 'w')
     conn2_writer = csv.writer(conn2_file)
+    conn3_file = open("third__connection_topo2_p050.csv", 'w')
+    conn3_writer = csv.writer(conn3_file)
     create_header(conn1_writer, channels_length)
     create_header(conn2_writer, channels_length)
-    conn = [{'start': 1, 'end': 15, 'ch': [], 'file': conn1_writer}, {'start': 2, 'end': 12, 'ch': [], 'file': conn2_writer}]
-    topo = LinearTopo(N=20, p=0.32, connection=conn)
+    create_header(conn3_writer, channels_length)
+    conn = [{'start': 1, 'end': 13, 'ch': [], 'file': conn1_writer}, {'start': 2, 'end': 17, 'ch': [], 'file': conn2_writer}, {'start': 4, 'end': 16, 'ch': [], 'file': conn3_writer}]
+    topo = LinearTopo(N=20, p=0.50, connection=conn)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
     net.start()
     restServer.start()
     requestHandler = RESTProxy()
-    plotNet(net, outfile='test_updated_linear_topo-watts_plot.png', directed=True)
+    plotNet(net, outfile='test_updated_linear_topo1-watts_plot_05.png', directed=True)
     counter = 1
     for ch in range(channels_length):
         count = 0
@@ -451,6 +455,7 @@ if __name__ == '__main__':
         counter += 1
     conn1_file.close()
     conn2_file.close()
+    conn3_file.close()
     if 'test' in argv:
         test(net)
     else:
