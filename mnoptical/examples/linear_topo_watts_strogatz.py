@@ -5,6 +5,7 @@ ringtopo.py: unidirectional ring network with 1-degree ROADMs
             and bidirectional Terminal<->ROADM links
 """
 import copy
+import os
 import random
 import csv
 from mnoptical.dataplane import (OpticalLink as OLink,
@@ -36,7 +37,7 @@ connection_detail = []
 roadm_links = {}
 terminal_ports = {}
 distance = 20
-roadm_line = 35 #29
+roadm_line = 40 #35 #29
 
 class LinearTopo(Topo):
     """Parametrized unidirectional ROADM ring network
@@ -421,29 +422,46 @@ if __name__ == '__main__':
     if 'clean' in argv: exit(0)
     channels_length = 80
     channels = []
-    channels.append(random.sample(range(1, 81), channels_length))
-    channels.append(random.sample(range(1, 81), channels_length))
-    channels.append(random.sample(range(1, 81), channels_length))
+    channel_file = "dataset/saved_channels.csv"
+    if not os.path.isfile(channel_file):
+        print("File not exists")
+        with open(channel_file, 'w', encoding='UTF8', newline='') as file:
+            writer = csv.writer(file)
+            for _ in range(5):
+                channels.append(random.sample(range(1, 81), channels_length))
+            writer.writerows(channels)
+            file.flush()
+    else:
+        with open(channel_file, newline='') as f:
+            channels = [list(map(int, rec)) for rec in csv.reader(f, delimiter=',')]
     print(channels)
-    conn1_file = open("first__connection_topo2_p075.csv", 'w')
+    conn1_file = open("first__connection_topo2_p0.csv", 'w')
     conn1_writer = csv.writer(conn1_file)
-    conn2_file = open("second__connection_topo2_p075.csv", 'w')
+    conn2_file = open("second__connection_topo2_p0.csv", 'w')
     conn2_writer = csv.writer(conn2_file)
-    conn3_file = open("third__connection_topo2_p075.csv", 'w')
+    conn3_file = open("third__connection_topo2_p0.csv", 'w')
     conn3_writer = csv.writer(conn3_file)
+    conn4_file = open("fourth__connection_topo2_p0.csv", 'w')
+    conn4_writer = csv.writer(conn4_file)
+    conn5_file = open("fifth__connection_topo2_p0.csv", 'w')
+    conn5_writer = csv.writer(conn5_file)
+
     create_header(conn1_writer, channels_length)
     create_header(conn2_writer, channels_length)
     create_header(conn3_writer, channels_length)
+    create_header(conn4_writer, channels_length)
+    create_header(conn5_writer, channels_length)
     conn = [{'start': 1, 'end': 13, 'ch': [], 'file': conn1_writer}, {'start': 2, 'end': 17, 'ch': [], 'file': conn2_writer},
-            {'start': 4, 'end': 16, 'ch': [], 'file': conn3_writer}]
-    topo = LinearTopo(N=20, p=0.75, connection=conn)
+            {'start': 4, 'end': 16, 'ch': [], 'file': conn3_writer}, {'start': 5, 'end': 18, 'ch': [], 'file': conn4_writer},
+            {'start': 3, 'end': 15, 'ch': [], 'file': conn5_writer}]
+    topo = LinearTopo(N=20, p=0.0, connection=conn)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
     net.start()
     restServer.start()
     requestHandler = RESTProxy()
-    plotNet(net, outfile='test_updated_linear_topo2-watts_plot_075.png', directed=True)
+    # plotNet(net, outfile='test_updated_linear_topo2-watts_plot_075.png', directed=True)
     counter = 1
     for ch in range(channels_length):
         count = 0
