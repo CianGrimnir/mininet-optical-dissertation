@@ -13,7 +13,7 @@ from mnoptical.dataplane import (OpticalLink as OLink,
                                  ROADM, Terminal,
                                  OpticalNet as Mininet,
                                  km, m, dB, dBm)
-
+from mnoptical.edfa_params import ripple_functions
 from mnoptical.ofcdemo.fakecontroller import (
     RESTProxy)
 from mnoptical.rest import RestServer
@@ -36,8 +36,8 @@ from utils import NodeInformation
 connection_detail = []
 roadm_links = {}
 terminal_ports = {}
-distance = 20
-roadm_line = 40 #35 #29
+distance = 17
+roadm_line = 70 #45 #29
 
 class LinearTopo(Topo):
     """Parametrized unidirectional ROADM ring network
@@ -78,7 +78,9 @@ class LinearTopo(Topo):
             self.addHost(f'h{i}')
         # Optical WAN link parameters
         boost = ('boost', {'target_gain': 17 * dB})
-        aparams = {'target_gain': distance * km * .22}
+        ripple_func = random.choice(list(ripple_functions.keys()))
+        print(f"\n\n ripple function set - {ripple_func}\n\n")
+        aparams = {'target_gain': distance * km * .22, 'wdg_id': ripple_func}
         spans = [distance * km, ('amp1', aparams), distance * km, ('amp2', aparams), distance * km, ('amp3', aparams), distance * km, ('amp4', aparams)]
         # Optical and packet links
         for i in range(1, N + 1):
@@ -104,7 +106,7 @@ class LinearTopo(Topo):
                 neigh_graph.add_edge(f'r{i}', f'r{neigh_node}')
                 linein_con = []
                 lineout_con = []
-                for _ in range(3):
+                for _ in range(5):
                     print(f'connecting roadms - r{i} r{neigh_node} {lineout} {linein}')
                     self.addLink(f'r{i}', f'r{neigh_node}',
                                  port1=lineout, port2=linein,
@@ -422,12 +424,14 @@ if __name__ == '__main__':
     if 'clean' in argv: exit(0)
     channels_length = 80
     channels = []
+    prob = 0.50
+    prob_file = "050"
     channel_file = "dataset/saved_channels.csv"
     if not os.path.isfile(channel_file):
         print("File not exists")
         with open(channel_file, 'w', encoding='UTF8', newline='') as file:
             writer = csv.writer(file)
-            for _ in range(5):
+            for _ in range(8):
                 channels.append(random.sample(range(1, 81), channels_length))
             writer.writerows(channels)
             file.flush()
@@ -435,33 +439,42 @@ if __name__ == '__main__':
         with open(channel_file, newline='') as f:
             channels = [list(map(int, rec)) for rec in csv.reader(f, delimiter=',')]
     print(channels)
-    conn1_file = open("first__connection_topo2_p0.csv", 'w')
+    conn1_file = open(f"first__connection_topo2_p{prob_file}.csv", 'w')
     conn1_writer = csv.writer(conn1_file)
-    conn2_file = open("second__connection_topo2_p0.csv", 'w')
+    conn2_file = open(f"second__connection_topo2_p{prob_file}.csv", 'w')
     conn2_writer = csv.writer(conn2_file)
-    conn3_file = open("third__connection_topo2_p0.csv", 'w')
+    conn3_file = open(f"third__connection_topo2_p{prob_file}.csv", 'w')
     conn3_writer = csv.writer(conn3_file)
-    conn4_file = open("fourth__connection_topo2_p0.csv", 'w')
+    conn4_file = open(f"fourth__connection_topo2_p{prob_file}.csv", 'w')
     conn4_writer = csv.writer(conn4_file)
-    conn5_file = open("fifth__connection_topo2_p0.csv", 'w')
+    conn5_file = open(f"fifth__connection_topo2_p{prob_file}.csv", 'w')
     conn5_writer = csv.writer(conn5_file)
-
+    conn6_file = open(f"sixth__connection_topo2_p{prob_file}.csv", 'w')
+    conn6_writer = csv.writer(conn6_file)
+    conn7_file = open(f"seventh__connection_topo2_p{prob_file}.csv", 'w')
+    conn7_writer = csv.writer(conn7_file)
+    conn8_file = open(f"eighth__connection_topo2_p{prob_file}.csv", 'w')
+    conn8_writer = csv.writer(conn8_file)
     create_header(conn1_writer, channels_length)
     create_header(conn2_writer, channels_length)
     create_header(conn3_writer, channels_length)
     create_header(conn4_writer, channels_length)
     create_header(conn5_writer, channels_length)
+    create_header(conn6_writer, channels_length)
+    create_header(conn7_writer, channels_length)
+    create_header(conn8_writer, channels_length)
     conn = [{'start': 1, 'end': 13, 'ch': [], 'file': conn1_writer}, {'start': 2, 'end': 17, 'ch': [], 'file': conn2_writer},
             {'start': 4, 'end': 16, 'ch': [], 'file': conn3_writer}, {'start': 5, 'end': 18, 'ch': [], 'file': conn4_writer},
-            {'start': 3, 'end': 15, 'ch': [], 'file': conn5_writer}]
-    topo = LinearTopo(N=20, p=0.0, connection=conn)
+            {'start': 3, 'end': 15, 'ch': [], 'file': conn5_writer}, {'start': 6, 'end': 19, 'ch': [], 'file': conn6_writer},
+            {'start': 7, 'end': 20, 'ch': [], 'file': conn7_writer}, {'start': 8, 'end': 14, 'ch': [], 'file': conn8_writer}]
+    topo = LinearTopo(N=20, p=prob, connection=conn)
     net = Mininet(topo=topo)
     print("starting model --- ")
     restServer = RestServer(net)
     net.start()
     restServer.start()
     requestHandler = RESTProxy()
-    # plotNet(net, outfile='test_updated_linear_topo2-watts_plot_075.png', directed=True)
+    plotNet(net, outfile=f'eight_conn_linear_topo2-watts_plot_{prob_file}.png', directed=True)
     counter = 1
     for ch in range(channels_length):
         count = 0
