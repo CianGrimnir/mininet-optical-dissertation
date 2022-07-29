@@ -78,10 +78,14 @@ class LinearTopo(Topo):
             self.addHost(f'h{i}')
         # Optical WAN link parameters
         boost = ('boost', {'target_gain': 17 * dB})
-        ripple_func = random.choice(list(ripple_functions.keys()))
-        print(f"\n\n ripple function set - {ripple_func}\n\n")
-        aparams = {'target_gain': distance * km * .22, 'wdg_id': ripple_func}
-        spans = [distance * km, ('amp1', aparams), distance * km, ('amp2', aparams), distance * km, ('amp3', aparams), distance * km, ('amp4', aparams)]
+        spans = []
+        for c in range(1, 5):
+            ripple_func = random.choice(list(ripple_functions.keys()))
+            print(f"\n\n ripple function set - {ripple_func}\n\n")
+            aparams = {'target_gain': distance * km * .22, 'wdg_id': ripple_func}
+            spans.extend([distance * km, (f'amp{c}', aparams)])
+        print(f'scan value - {spans}')
+        # spans = [distance * km, ('amp1', aparams), distance * km, ('amp2', aparams), distance * km, ('amp3', aparams), distance * km, ('amp4', aparams)]
         # Optical and packet links
         for i in range(1, N + 1):
             # Unidirectional roadm->roadm optical links
@@ -424,8 +428,8 @@ if __name__ == '__main__':
     if 'clean' in argv: exit(0)
     channels_length = 80
     channels = []
-    prob = 0.50
-    prob_file = "050"
+    prob = 0.75
+    prob_file = "075"
     channel_file = "dataset/saved_channels.csv"
     if not os.path.isfile(channel_file):
         print("File not exists")
