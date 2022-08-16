@@ -32,4 +32,4 @@ class NodeInformation:
 
     def get_link(self):
         """return lineout and linein information"""
-        return self.lineout, self.linein
+        return self.lineout.pop(0), self.linein.pop(0)
